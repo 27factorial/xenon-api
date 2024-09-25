@@ -1,11 +1,13 @@
 #[cfg(not(all(target_family = "wasm", target_vendor = "unknown")))]
 compile_error!("This crate is intended for use with the wasm32-unknown-unknown target only.");
 
+pub mod asynch;
+pub mod critical_section;
 pub mod ffi;
-pub mod widget;
 pub mod io;
-pub mod rng;
 pub(crate) mod panic;
+pub mod rng;
+pub mod widget;
 
 macro_rules! syscalls {
     (
@@ -24,19 +26,24 @@ macro_rules! syscalls {
     }
 }
 
-#[no_mangle]
-extern "C" fn __xenon_start() {
-    extern "Rust" {
-        fn main();
-    }
-
-    std::panic::set_hook(Box::new(panic::panic_hook));
-
-    unsafe {
-        main();
-    }
-}
-
-pub(crate) use syscalls;
+use asynch::executor::{Executor, Spawner};
+use static_cell::StaticCell;
 
 pub use embedded_graphics;
+pub(crate) use syscalls;
+
+#[no_mangle]
+extern "C" fn __xenon_start() {
+    static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+
+    std::panic::set_hook(Box::new(panic::panic_hook));
+    let executor = EXECUTOR.init(Executor::new());
+
+    extern "Rust" {
+        fn main(spawner: Spawner);
+    }
+
+    executor.start(|spawner| unsafe {
+        main(spawner);
+    });
+}

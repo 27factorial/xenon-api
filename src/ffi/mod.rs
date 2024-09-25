@@ -5,6 +5,7 @@ pub mod time;
 pub mod tuple;
 pub mod widget;
 pub mod rng;
+pub mod asynch;
 
 trait Sealed {}
 
